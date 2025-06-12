@@ -1,0 +1,239 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UmaTF-8">
+  <title>Advanced Particle Sandbox</title>
+  <style>
+    body {
+      margin: 0;
+      background: #aef;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #toolbar {
+      margin: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+    }
+    button {
+      padding: 6px 10px;
+      font-size: 14px;
+    }
+    canvas {
+      border: 2px solid white;
+      image-rendering: pixelated;
+      cursor: crosshair;
+      max-width: 100vw;
+      max-height: 80vh;
+      background: black;
+    }
+  </style>
+<style>:is([id*='google_ads_iframe'],[id*='taboola-'],.taboolaHeight,.taboola-placeholder,#top-ad,#credential_picker_container,#credentials-picker-container,#credential_picker_iframe,[id*='google-one-tap-iframe'],#google-one-tap-popup-container,.google-one-tap__module,.google-one-tap-modal-div,#amp_floatingAdDiv,#ez-content-blocker-container) {display:none!important;min-height:0!important;height:0!important;}</style></head>
+<body>
+
+<h1>Advanced Particle Sandbox</h1>
+<div id="toolbar"><button>Sand</button><button>Water</button><button>Wall</button><button>Fire</button><button>Plant</button><button>Oil</button><button>Turbine</button><button>Clear</button></div>
+<canvas id="canvas" width="800" height="600"></canvas>
+
+<script>
+const pixelSize = 4;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const width = 200;
+const height = 150;
+canvas.width = width * pixelSize;
+canvas.height = height * pixelSize;
+
+const EMPTY = 0, SAND = 1, WATER = 2, WALL = 3, FIRE = 4, PLANT = 5, OIL = 6;
+const COLORS = {
+  [EMPTY]: [0, 0, 0],
+  [SAND]: [194, 178, 128],
+  [WATER]: [0, 119, 190],
+  [WALL]: [80, 80, 80],
+  [FIRE]: [255, 80, 0],
+  [PLANT]: [34, 139, 34],
+  [OIL]: [80, 60, 30],
+  7: [200, 200, 255] // Turbine color
+};
+
+let currentTool = SAND;
+let mouseDown = false;
+
+const elements = {
+  'Sand': SAND,
+  'Water': WATER,
+  'Wall': WALL,
+  'Fire': FIRE,
+  'Plant': PLANT,
+  'Oil': OIL,
+  'Turbine': 7, // new element
+  'Clear': -1
+};
+
+const grid = Array.from({ length: height }, () => Array(width).fill(EMPTY));
+
+const player = { x: 10, y: 10, color: [255, 255, 255], size: 2 };
+
+const toolbar = document.getElementById('toolbar');
+for (const [name, type] of Object.entries(elements)) {
+  const btn = document.createElement('button');
+  btn.textContent = name;
+  btn.onclick = () => {
+    if (type === -1) clearGrid();
+    else currentTool = type;
+  };
+  toolbar.appendChild(btn);
+}
+
+function clearGrid() {
+  for (let y = 0; y < height; y++) grid[y].fill(EMPTY);
+}
+
+canvas.addEventListener('mousedown', () => mouseDown = true);
+canvas.addEventListener('mouseup', () => mouseDown = false);
+canvas.addEventListener('mouseleave', () => mouseDown = false);
+canvas.addEventListener('mousemove', (e) => {
+  if (!mouseDown) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / pixelSize);
+  const y = Math.floor((e.clientY - rect.top) / pixelSize);
+  if (x >= 0 && x < width && y >= 0 && y < height) {
+    grid[y][x] = currentTool;
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  let nx = player.x;
+  let ny = player.y;
+  const speed = 3; // Increase movement speed
+  if (e.key === 'ArrowUp') ny -= speed;
+  if (e.key === 'ArrowDown') ny += speed;
+  if (e.key === 'ArrowLeft') nx -= speed;
+  if (e.key === 'ArrowRight') nx += speed;
+  // Clamp position and check for WALL
+  for (let dx = 0; dx < player.size; dx++) {
+    for (let dy = 0; dy < player.size; dy++) {
+      if (
+        nx + dx < 0 || nx + dx >= width ||
+        ny + dy < 0 || ny + dy >= height ||
+        grid[ny + dy][nx + dx] === WALL
+      ) {
+        return;
+      }
+    }
+  }
+  player.x = nx;
+  player.y = ny;
+});
+
+function update() {
+  // Simulate turbine spin when touched
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (grid[y][x] === 7) { // Turbine
+        const affected = [];
+        for (let dy = -3; dy <= 3; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            if (dx !== 0 || dy !== 0) affected.push([y + dy, x + dx]);
+          }
+        }
+        affected.forEach(([ny, nx]) => {
+          if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+            if (grid[ny][nx] !== 7 && grid[ny][nx] !== EMPTY) {
+              const temp = grid[ny][nx];
+              grid[ny][nx] = EMPTY;
+              const dx = Math.round(Math.cos(Date.now() / 100));
+              const dy = Math.round(Math.sin(Date.now() / 100));
+              const tx = nx + dx, ty = ny + dy;
+              if (tx >= 0 && tx < width && ty >= 0 && ty < height && grid[ty][tx] === EMPTY) {
+                grid[ty][tx] = temp;
+              }
+            }
+          }
+        });
+      }
+    }
+  }
+  for (let y = height - 2; y >= 0; y--) {
+    for (let x = 0; x < width; x++) {
+      const cell = grid[y][x];
+      if (cell === SAND) {
+        if (grid[y + 1][x] === EMPTY) {
+          grid[y + 1][x] = SAND; grid[y][x] = EMPTY;
+        } else if (x > 0 && grid[y + 1][x - 1] === EMPTY) {
+          grid[y + 1][x - 1] = SAND; grid[y][x] = EMPTY;
+        } else if (x < width - 1 && grid[y + 1][x + 1] === EMPTY) {
+          grid[y + 1][x + 1] = SAND; grid[y][x] = EMPTY;
+        } else if (y + 1 < height && x > 0 && grid[y + 1][x] !== EMPTY && grid[y][x - 1] === EMPTY) {
+          grid[y][x - 1] = SAND; grid[y][x] = EMPTY;
+        }
+      } else if (cell === WATER || cell === OIL) {
+        const dirs = [[1, 0], [1, -1], [1, 1], [0, -1], [0, 1]];
+        for (const [dy, dx] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < width && ny < height && grid[ny][nx] === EMPTY) {
+            grid[ny][nx] = cell; grid[y][x] = EMPTY;
+            break;
+          } else if (cell === WATER && grid[ny][nx] === PLANT) {
+            const gx = nx + (Math.random() < 0.5 ? -1 : 1);
+            const gy = ny + (Math.random() < 0.5 ? -1 : 1);
+            if (gx >= 0 && gx < width && gy >= 0 && gy < height && grid[gy][gx] === EMPTY) {
+              grid[gy][gx] = PLANT;
+            }
+          }
+        }
+      } else if (cell === FIRE) {
+        if (Math.random() < 0.1) grid[y][x] = EMPTY;
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dy, dx] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            if (grid[ny][nx] === PLANT || grid[ny][nx] === OIL) {
+              grid[ny][nx] = FIRE;
+            }
+          }
+        }
+      } else if (cell === PLANT) {
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const [dy, dx] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && grid[ny][nx] === FIRE) {
+            grid[y][x] = FIRE;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const color = COLORS[grid[y][x]];
+      if (color) {
+        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+      }
+    }
+  }
+  // Draw larger stick figure character
+  ctx.fillStyle = `rgb(${player.color[0]},${player.color[1]},${player.color[2]})`;
+  ctx.fillRect(player.x * pixelSize, player.y * pixelSize, pixelSize * player.size, pixelSize * player.size);
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+
+</body></html>
